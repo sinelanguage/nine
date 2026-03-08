@@ -17,6 +17,7 @@ _CPack_Packages/
 CPack*.cmake
 nine_artefacts/
 JUCE/
+vst3sdk/
 __pycache__/
 *.pyc
 analysis/

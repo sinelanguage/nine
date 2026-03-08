@@ -6,72 +6,58 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Mac ARM / universal binary support
 if(APPLE)
-    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures" FORCE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "macOS deployment target" FORCE)
+    set(CMAKE_OSX_ARCHITECTURES     "arm64;x86_64" CACHE STRING "macOS architectures" FORCE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0"          CACHE STRING "macOS deployment target" FORCE)
 endif()
 
+# ---------------------------------------------------------------------------
+# VST3 SDK – fetched at configure time; no JUCE dependency
+# Correct option names discovered from the SDK's own CMakeLists.txt
+# ---------------------------------------------------------------------------
+set(SMTG_ENABLE_VSTGUI_SUPPORT        OFF CACHE BOOL "" FORCE)  # no GUI toolkit
+set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES  OFF CACHE BOOL "" FORCE)  # skip sample plug-ins
+set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)  # skip hosting examples
+set(SMTG_ENABLE_USE_OF_JACK           OFF CACHE BOOL "" FORCE)  # no JACK
+set(SMTG_ADD_UNIT_TESTS               OFF CACHE BOOL "" FORCE)  # no SDK unit tests
+
 include(FetchContent)
-
-# Download JUCE
 FetchContent_Declare(
-    JUCE
-    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG        7.0.9
+    vst3sdk
+    GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
+    GIT_TAG        v3.7.14_build_55
     GIT_SHALLOW    TRUE
+    # Only fetch the required submodules; exclude vstgui4, doc, tutorials
+    GIT_SUBMODULES "base cmake pluginterfaces public.sdk"
 )
-FetchContent_MakeAvailable(JUCE)
+FetchContent_MakeAvailable(vst3sdk)
 
-# Plugin target
-juce_add_plugin(nine
-    VERSION                     1.0.0
-    COMPANY_NAME                "nine"
-    PLUGIN_MANUFACTURER_CODE    Nine
-    PLUGIN_CODE                 Tr99
-    FORMATS                     VST3 AU Standalone
-    PRODUCT_NAME                "nine"
-    BUNDLE_ID                   "com.nine.tr909"
-    IS_SYNTH                    TRUE
-    NEEDS_MIDI_INPUT            TRUE
-    NEEDS_MIDI_OUTPUT           FALSE
-    IS_MIDI_EFFECT              FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    COPY_PLUGIN_AFTER_BUILD     FALSE
-    VST3_CATEGORIES             "Instrument" "Drums"
-    AU_MAIN_TYPE                kAudioUnitType_MusicDevice
-)
-
-# Source files
-target_sources(nine PRIVATE
-    Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp
-    Source/circuits/TR909BassDrum.cpp
-    Source/circuits/TR909SnareDrum.cpp
-    Source/circuits/TR909Tom.cpp
-    Source/circuits/TR909RimShot.cpp
-    Source/circuits/TR909Clap.cpp
+# ---------------------------------------------------------------------------
+# Plugin target – uses the SDK's smtg_add_vst3plugin helper which sets up
+# the correct bundle layout on macOS and the correct export/suffix elsewhere.
+# ---------------------------------------------------------------------------
+smtg_add_vst3plugin(nine
+    SOURCES_LIST
+        Source/NineFactory.cpp
+        Source/NineProcessor.cpp
+        Source/NineController.cpp
+        Source/circuits/TR909BassDrum.cpp
+        Source/circuits/TR909SnareDrum.cpp
+        Source/circuits/TR909Tom.cpp
+        Source/circuits/TR909RimShot.cpp
+        Source/circuits/TR909Clap.cpp
 )
 
-target_include_directories(nine PRIVATE Source)
+# Circuit-model and plugin headers live under Source/
+target_include_directories(nine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 
-target_compile_definitions(nine PUBLIC
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_DISPLAY_SPLASH_SCREEN=0
-    JUCE_REPORT_APP_USAGE=0
-)
+# Link against the Steinberg VST3 SDK core (provides public include paths)
+target_link_libraries(nine PRIVATE sdk)
 
-juce_generate_juce_header(nine)
-
-target_link_libraries(nine
-    PRIVATE
-        juce::juce_audio_utils
-        juce::juce_audio_processors
-        juce::juce_audio_plugin_client
-        juce::juce_dsp
-        juce::juce_gui_basics
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags
-)
+# Platform-specific entry-point glue
+# - Linux: ModuleEntry / ModuleExit exported by linuxmain.cpp
+# - macOS: GetPluginFactory / bundleEntry via macmain.mm (already in sdk)
+# - Windows: DLL entry-point via dllmain.cpp (already in sdk)
+if(UNIX AND NOT APPLE)
+    target_sources(nine PRIVATE
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/linuxmain.cpp)
+endif()

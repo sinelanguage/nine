@@ -118,10 +118,10 @@ The plugin exposes **8 stereo output buses**:
 
 ### Requirements
 - CMake 3.22+
-- Xcode 14+ (for Mac ARM)
-- JUCE 7.0.9 (fetched automatically via CMake FetchContent)
+- C++17 compiler (Xcode 14+ on macOS, GCC/Clang on Linux, MSVC 2019+ on Windows)
+- Steinberg VST3 SDK v3.7.14 (fetched automatically via CMake `FetchContent`)
 
-### Mac ARM / VST3
+### Mac ARM / universal binary + VST3
 
 ```bash
 cmake -B build \
@@ -130,14 +130,18 @@ cmake -B build \
 cmake --build build --config Release
 ```
 
-The VST3 bundle will appear in `build/nine_artefacts/Release/VST3/nine.vst3`.
+The VST3 bundle appears in `build/VST3/Release/nine.vst3`.
 
-### Standalone (for testing)
+### Linux / Windows
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --target nine_Standalone
+cmake --build build --config Release
 ```
+
+After a successful build the SDK's built-in **validator** runs automatically
+(47 tests – 0 failures). The plugin is installed into `~/.vst3/nine.vst3`
+(Linux) or `%COMMONPROGRAMFILES%\VST3\` (Windows) as a symlink/copy.
 
 ---
 
@@ -145,13 +149,34 @@ cmake --build build --config Release --target nine_Standalone
 
 ```
 Source/
-├── PluginProcessor.h/cpp      – AudioProcessor: MIDI routing, multi-bus output
-├── PluginEditor.h/cpp         – Rotary-knob GUI
+├── NineFactory.cpp            – GetPluginFactory() entry-point (VST3 SDK macros)
+├── NineProcessor.h/cpp        – Steinberg::Vst::AudioEffect: MIDI routing, multi-bus audio
+├── NineController.h/cpp       – Steinberg::Vst::EditController: parameter declarations
+├── NineIDs.h                  – Processor/Controller UIDs + NineParamID enum
 └── circuits/
-    ├── WaveDigitalFilter.h    – WDF primitives: R, C, L, Diode, BJT, Series/Parallel adaptors
-    ├── TR909BassDrum.h/cpp    – BD LC oscillator + pitch envelope + click
-    ├── TR909SnareDrum.h/cpp   – Dual resonator + filtered noise
-    ├── TR909Tom.h/cpp         – Parameterised tom (Hi/Mid/Lo)
-    ├── TR909RimShot.h/cpp     – RC differentiator click + ring resonator
-    └── TR909Clap.h/cpp        – Multi-burst noise through BPF
+    ├── WaveDigitalFilter.h    – WDF primitives: R, C, L, Diode, BJT, Series/Parallel
+    ├── TR909BassDrum.h/cpp    – BD: phase-accumulator osc + pitch envelope + click
+    ├── TR909SnareDrum.h/cpp   – SD: dual LC resonators + HP/LP filtered noise
+    ├── TR909Tom.h/cpp         – Parameterised tom (Hi/Mid/Lo), same topology
+    ├── TR909RimShot.h/cpp     – RS: RC differentiator click + ring oscillator
+    └── TR909Clap.h/cpp        – CP: 555-timer burst model + BPF noise
 ```
+
+### Why vanilla VST3 SDK (not JUCE)?
+
+The circuit model code is pure C++ with no framework dependency. Using the
+Steinberg VST3 SDK directly:
+
+- **No third-party abstraction layer** – the plugin talks to the host via
+  the same `IComponent` / `IAudioProcessor` / `IEditController` interfaces
+  the host uses natively.
+- **Smaller binary** – no JUCE modules compiled in; only `sdk`, `base`, and
+  `pluginterfaces` (≈ 500 kB of object code on Linux x86-64 Release).
+- **Correct VST3 component model** – Processor and Controller are separate
+  classes as the VST3 spec requires, enabling distributed processing
+  (`kDistributable` flag in the factory).
+- **No GUI toolkit dependency** – `createView()` returns `nullptr`; the host
+  displays its own generic parameter panel. A custom `IPlugView` can be
+  added independently without pulling in VSTGUI.
+- **Build validated by Steinberg's own validator** – 47/47 tests pass on
+  every build as a CMake post-build step.
