@@ -298,7 +298,6 @@ def write_wav(path: str, samples: np.ndarray, fs: int = 44100):
     nch = 1; bits = 32
     with open(path, "wb") as f:
         f.write(b"RIFF")
-        import struct
         f.write(struct.pack("<I", 36 + len(data)))
         f.write(b"WAVE")
         f.write(b"fmt ")

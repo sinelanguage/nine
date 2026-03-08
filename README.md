@@ -32,8 +32,8 @@ are taken verbatim from those schematics.
 ### Snare Drum (SD)
 | Component | Value | Role |
 |-----------|-------|------|
-| L3, C14   | 35 mH, 10 µF | Body resonator 1 → ω₁ ≈ 169 Hz |
-| L4, C16   | 35 mH, 4.7 µF | Body resonator 2 → ω₂ ≈ 246 Hz |
+| L3, C14   | 35 mH, 10 µF | Body resonator 1 → ω₁ ≈ 269 Hz |
+| L4, C16   | 35 mH, 4.7 µF | Body resonator 2 → ω₂ ≈ 392 Hz |
 | C_n       | 10 nF | Noise HP cutoff cap |
 | R_n       | 10 kΩ | Noise filter resistor |
 | VR1       | 0–500 kΩ | DECAY |
@@ -47,9 +47,9 @@ are taken verbatim from those schematics.
 ### Toms (Hi / Mid / Lo)
 | Tom  | Capacitor | Natural Frequency |
 |------|-----------|-------------------|
-| Hi   | C = 4.7 µF | f₀ ≈ 350 Hz |
-| Mid  | C = 10 µF  | f₀ ≈ 240 Hz |
-| Lo   | C = 22 µF  | f₀ ≈ 162 Hz |
+| Hi   | C = 4.7 µF | f₀ ≈ 392 Hz |
+| Mid  | C = 10 µF  | f₀ ≈ 269 Hz |
+| Lo   | C = 22 µF  | f₀ ≈ 181 Hz |
 
 All toms use L = 35 mH and R = 2.2 kΩ (schematic values). TUNE and DECAY pots
 follow the same VR × C time-constant model as the BD.

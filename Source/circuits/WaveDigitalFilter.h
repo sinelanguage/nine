@@ -182,13 +182,12 @@ struct SeriesAdaptor {
     void propagate(double a0) noexcept
     {
         double b1 = p1->b, b2 = p2->b;
-        double a1 = a0 - b2 - b1 + b1;
-        double a2 = a0 - b1 - b2 + b2;
-        // Series: a1 = -a0 + 2*p1->b ... derive properly:
+        // Series adaptor scattering: each port receives incident wave
+        // minus the sum of all other ports' reflected waves
         double ratio1 = p1->Rp / Rp0;
         double ratio2 = p2->Rp / Rp0;
-        a1 = a0 * (1.0 - 2.0 * ratio1) + 2.0 * ratio1 * b1 - 2.0 * ratio2 * b2;
-        a2 = a0 * (1.0 - 2.0 * ratio2) + 2.0 * ratio2 * b2 - 2.0 * ratio1 * b1;
+        double a1 = a0 * (1.0 - 2.0 * ratio1) + 2.0 * ratio1 * b1 - 2.0 * ratio2 * b2;
+        double a2 = a0 * (1.0 - 2.0 * ratio2) + 2.0 * ratio2 * b2 - 2.0 * ratio1 * b1;
         p1->setIncidentWave(a1);
         p2->setIncidentWave(a2);
     }
