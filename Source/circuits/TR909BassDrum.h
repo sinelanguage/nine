@@ -5,14 +5,16 @@
  * Based on the Roland TR-909 schematic (Bass Drum section):
  *  - LC bridged-T oscillator: L1=35mH, C8=47µF  → ω₀=824 rad/s (131 Hz)
  *  - Q1/Q2 = 2SC1000 NPN transistors (Ebers-Moll softclip at output)
- *  - TUNE pot (VR3, 50 kΩ) shifts base frequency (~40–100 Hz range)
- *  - DECAY pot (VR1, 500 kΩ): τ_decay = VR1 × C8 (0.047 ms – 23.5 s)
- *  - Pitch envelope τ: C5×R12 = 4.7 ms (fixed by schematic)
- *  - TONE: click transient level through RC differentiator (R17, C5)
+ *  - TUNE pot (VR3, 50 kΩ) shifts the bridged-T/LC body frequency
+ *  - DECAY pot (VR1, 500 kΩ): effective τ from VR1 × C8 under circuit loading
+ *  - ATTACK pot controls the trigger pulse / beater transient strength
+ *  - LEVEL pot sets the final output level
  *
  * DSP realisation:
- *  Phase-accumulator oscillator with pitch-swept instantaneous frequency.
- *  All time constants and frequencies derived from schematic component values.
+ *  Damped two-pole resonator excited by a short trigger pulse and shaped by
+ *  schematic RC time constants. A short pitch sweep from C5 × R12 is retained,
+ *  but the audible front-end impact comes from a differentiated beater transient
+ *  rather than a separate tone control.
  */
 #include <cmath>
 
@@ -29,7 +31,7 @@ public:
 
     float tune   = 0.5f;
     float decay  = 0.5f;
-    float tone   = 0.5f;
+    float attack = 0.5f;
     float level  = 1.0f;
 
     void prepare(double sampleRate);
@@ -40,22 +42,19 @@ private:
     double fs_    = 44100.0;
     double invFs_ = 1.0 / 44100.0;
 
-    // Phase-accumulator oscillator
-    double phase_      = 0.0;
-
-    // Amplitude envelope
-    double ampEnv_     = 0.0;
-    double ampDecay_   = 0.0;
-
-    // Pitch envelope
-    double pitchEnv_   = 0.0;
-    double pitchDecay_ = 0.0;
-    double fBase_      = 60.0;  // base (resting) frequency
-    double fDelta_     = 100.0; // initial pitch offset above fBase
-
-    // Click transient
-    double clickLevel_ = 0.0;
-    double clickDecay_ = 0.0;
+    double bodyZ1_       = 0.0;
+    double bodyZ2_       = 0.0;
+    double bodyDecay_    = 0.0;
+    double exciteEnv_    = 0.0;
+    double exciteDecay_  = 0.0;
+    double exciteState_  = 0.0;
+    double pitchEnv_     = 0.0;
+    double pitchDecay_   = 0.0;
+    double beaterEnv_    = 0.0;
+    double beaterDecay_  = 0.0;
+    double beaterState_  = 0.0;
+    double fBase_        = 60.0;
+    double fSweepRatio_  = 1.9;
 
     float accentGain_  = 1.0f;
 

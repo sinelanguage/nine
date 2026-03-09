@@ -21,12 +21,13 @@ are taken verbatim from those schematics.
 | R12       | 4.7 kΩ | Biasing / pitch-decay resistor |
 | VR1       | 0–500 kΩ | DECAY pot → τ = VR1 × C8 |
 | VR3       | 0–50 kΩ | TUNE pot → shifts oscillator frequency |
+| Attack pot | schematic BD attack control | Controls the trigger / beater transient |
 
 **DSP realisation:**
-- Natural frequency ω₀ = 1/√(L1·C8) ≈ 824 rad/s (131 Hz) – matched to schematic LC
-- Pitch envelope: f(t) = f₀ · (1 + A·e^(−t/τ_pitch)), τ_pitch from C5·R12
-- Amplitude envelope: exponential decay, τ = VR1·C8
-- Click transient: RC differentiator output (R17, C5)
+- Natural frequency ω₀ = 1/√(L1·C8) sets the body resonator reference
+- Body: damped two-pole resonator excited by a trigger pulse, with decay from the loaded VR1/C8 network
+- Pitch envelope: short trigger sweep from C5·R12
+- Attack: differentiated beater transient rather than a generic "tone" control
 - Output stage: tanh soft-clipper modelling transistor saturation
 
 ### Snare Drum (SD)
