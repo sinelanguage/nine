@@ -41,6 +41,9 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Bass Drum (TR909BassDrum.h)
 BD_L1  = 35e-3;  BD_C8  = 47e-6;  BD_R17 = 2200.0; BD_C5 = 1e-6; BD_R12 = 4700.0
+BD_DECAY_POT_MIN = 1000.0
+BD_DECAY_POT_RANGE = 499000.0
+BD_BODY_LOAD_OHMS = 18000.0
 # Snare Drum (TR909SnareDrum.h)
 SD_L3  = 35e-3;  SD_C14 = 10e-6;  SD_L4  = 35e-3;  SD_C16 = 4.7e-6
 # Toms (TR909Tom.h)
@@ -89,9 +92,8 @@ def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, attack=0.5):
     pitch_dec  = math.exp(-inv_fs / tau_pitch)
     pitch_env  = 1.0
 
-    VR1 = 1000.0 + decay * 499000.0
-    body_load = 18000.0
-    effective_r = (VR1 * body_load) / (VR1 + body_load)
+    VR1 = BD_DECAY_POT_MIN + decay * BD_DECAY_POT_RANGE
+    effective_r = (VR1 * BD_BODY_LOAD_OHMS) / (VR1 + BD_BODY_LOAD_OHMS)
     tau_body = max(0.025, effective_r * BD_C8)
     body_dec = math.exp(-inv_fs / tau_body)
 

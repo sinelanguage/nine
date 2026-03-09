@@ -1,6 +1,12 @@
 #include "TR909BassDrum.h"
 #include <cmath>
 
+namespace {
+constexpr double kDecayPotMinOhms = 1000.0;
+constexpr double kDecayPotRangeOhms = 499000.0; // 499 kΩ range (1 kΩ to 500 kΩ total)
+constexpr double kBodyLoadOhms = 18000.0;       // effective fixed load of the bridged network/output stage
+}
+
 void TR909BassDrum::prepare(double sampleRate) {
     fs_    = sampleRate;
     invFs_ = 1.0 / sampleRate;
@@ -10,7 +16,7 @@ void TR909BassDrum::prepare(double sampleRate) {
 
 void TR909BassDrum::trigger(float velocity, bool accent) {
     accentGain_ = accent ? 1.4f : 1.0f;
-    const double v = static_cast<double>(velocity * accentGain_ * level);
+    const double v = static_cast<double>(velocity * accentGain_) * static_cast<double>(level);
     const double tuneNorm = static_cast<double>(tune);
     const double decayNorm = static_cast<double>(decay);
     const double attackNorm = static_cast<double>(attack);
@@ -26,9 +32,10 @@ void TR909BassDrum::trigger(float velocity, bool accent) {
     pitchEnv_   = 1.0;
 
     // Loaded decay path for the resonant body.
-    const double VR1 = 1000.0 + decayNorm * 499000.0;
-    const double bodyLoad = 18000.0;
-    const double effectiveR = (VR1 * bodyLoad) / (VR1 + bodyLoad);
+    const double VR1 = kDecayPotMinOhms + decayNorm * kDecayPotRangeOhms;
+    const double effectiveR = (VR1 * kBodyLoadOhms) / (VR1 + kBodyLoadOhms);
+    // Keep the loaded body envelope in a practical ringing range so minimum decay
+    // settings still excite a short but audible analog-style bass drum body.
     const double tauBody = std::max(0.025, effectiveR * C8);
     bodyDecay_ = std::exp(-invFs_ / tauBody);
 
