@@ -55,9 +55,12 @@ target_link_libraries(nine PRIVATE sdk)
 
 # Platform-specific entry-point glue
 # - Linux: ModuleEntry / ModuleExit exported by linuxmain.cpp
-# - macOS: GetPluginFactory / bundleEntry via macmain.mm (already in sdk)
+# - macOS: bundleEntry / bundleExit via macmain.cpp
 # - Windows: DLL entry-point via dllmain.cpp (already in sdk)
-if(UNIX AND NOT APPLE)
+if(APPLE)
+    target_sources(nine PRIVATE
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/macmain.cpp)
+elseif(UNIX)
     target_sources(nine PRIVATE
         ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/linuxmain.cpp)
 endif()

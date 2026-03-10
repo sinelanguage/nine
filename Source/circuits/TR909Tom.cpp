@@ -1,4 +1,5 @@
 #include "TR909Tom.h"
+#include <algorithm>
 #include <cmath>
 
 void TR909Tom::setType(TomType t) {
