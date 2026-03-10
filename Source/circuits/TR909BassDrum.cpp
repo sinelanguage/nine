@@ -108,7 +108,7 @@ void TR909BassDrum::trigger(float velocity, bool accent)
     const double vel = clamp01(velocity);
 
     // Inferred: accent is a trigger-time control that changes level and drive, not only amplitude.
-    accentAmount_ = std::clamp((accent ? 0.75 : 0.0) + vel * 0.25, 0.0, 1.0);
+    accentAmount_ = accent ? 1.0 : 0.0;
     const double strikeLevel = vel * derived_.levelGain * (1.0 + calibration_.accentLevelBoost * accentAmount_);
 
     bodyExciteEnv_ = strikeLevel * derived_.bodyExciteAmount;
