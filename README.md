@@ -26,9 +26,11 @@ are taken verbatim from those schematics.
 **DSP realisation:**
 - Natural frequency ω₀ = 1/√(L1·C8) sets the body resonator reference
 - Body: damped two-pole resonator excited by a trigger pulse, with decay from the loaded VR1/C8 network
-- Pitch envelope: short trigger sweep from C5·R12
-- Attack: differentiated beater transient rather than a generic "tone" control
-- Output stage: tanh soft-clipper modelling transistor saturation
+- Pitch envelope: dual-rate downward sweep anchored to C5·R12 for a steeper front-end drop and slower settling tail
+- Attack: differentiated beater transient with a short tone-shaping stage feeding both click and body injection
+- Accent: trigger-time modulation of level, transient drive, and pitch-sweep depth rather than amplitude-only scaling
+- Output stage: asymmetric soft-clipping with a small memory term for analog-style compression/slew
+- Internal calibration hooks expose the main hardware-matching points without changing the public API
 
 ### Snare Drum (SD)
 | Component | Value | Role |

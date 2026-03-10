@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 TR-909 Circuit Model – Frequency Spectrum Analyser
 ===================================================
@@ -44,6 +45,42 @@ BD_L1  = 35e-3;  BD_C8  = 47e-6;  BD_R17 = 2200.0; BD_C5 = 1e-6; BD_R12 = 4700.0
 BD_DECAY_POT_MIN = 1000.0
 BD_DECAY_POT_RANGE = 499000.0
 BD_BODY_LOAD_OHMS = 18000.0
+BD_TUNE_POT_TAPER = 0.82
+BD_DECAY_POT_TAPER = 1.35
+BD_ATTACK_POT_TAPER = 1.15
+BD_LEVEL_POT_TAPER = 2.0
+BD_TUNE_MIN_SCALE = 0.34
+BD_TUNE_MAX_SCALE = 0.74
+BD_MIN_BODY_TAU = 0.030
+BD_MAX_BODY_TAU = 0.950
+BD_EXCITE_TAU_SCALE = 0.30
+BD_EXCITE_TAU_RANGE = 0.75
+BD_EXCITE_AMOUNT_MIN = 0.18
+BD_EXCITE_AMOUNT_RANGE = 0.68
+BD_TRANSIENT_TAU_SCALE = 0.08
+BD_TRANSIENT_TAU_RANGE = 0.22
+BD_TRANSIENT_AMOUNT_MIN = 0.05
+BD_TRANSIENT_AMOUNT_RANGE = 0.80
+BD_TRANSIENT_TO_BODY = 0.20
+BD_TRANSIENT_TONE_MIN_HZ = 2200.0
+BD_TRANSIENT_TONE_RANGE_HZ = 4200.0
+BD_PITCH_FAST_TAU_SCALE = 0.38
+BD_PITCH_SLOW_TAU_SCALE = 2.10
+BD_PITCH_FAST_DEPTH_MIN = 1.10
+BD_PITCH_FAST_DEPTH_RANGE = 0.95
+BD_PITCH_SLOW_DEPTH = 0.22
+BD_ACCENT_LEVEL_BOOST = 0.28
+BD_ACCENT_TRANSIENT_BOOST = 0.45
+BD_ACCENT_PITCH_BOOST = 0.18
+BD_ACCENT_DRIVE_BOOST = 0.35
+BD_ACCENT_BIAS_BOOST = 0.03
+BD_BODY_DRIVE = 1.75
+BD_TRANSIENT_DRIVE = 5.25
+BD_OUTPUT_DRIVE = 1.25
+BD_OUTPUT_BIAS = 0.035
+BD_OUTPUT_ASYMMETRY = 0.22
+BD_OUTPUT_MEMORY_HZ = 1800.0
+BD_OUTPUT_GAIN = 0.62
 # Snare Drum (TR909SnareDrum.h)
 SD_L3  = 35e-3;  SD_C14 = 10e-6;  SD_L4  = 35e-3;  SD_C16 = 4.7e-6
 # Toms (TR909Tom.h)
@@ -77,58 +114,83 @@ def bpf_coeff(fc: float, Q: float, fs: float):
 # Circuit model simulations (mirror C++ DSP exactly)
 # ---------------------------------------------------------------------------
 
-def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, attack=0.5):
-    """TR-909 Bass Drum: damped resonator with pitch sweep and beater transient."""
+def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, attack=0.5, level=0.8):
+    """TR-909 Bass Drum: resonant body + dual-rate pitch sweep + shaped transient."""
     inv_fs = 1.0 / fs
     n  = int(fs * duration)
     out = np.zeros(n)
 
-    # Schematic-derived parameters
+    tune_pos = max(0.0, min(1.0, tune)) ** BD_TUNE_POT_TAPER
+    decay_pos = max(0.0, min(1.0, decay)) ** BD_DECAY_POT_TAPER
+    attack_pos = max(0.0, min(1.0, attack)) ** BD_ATTACK_POT_TAPER
+    level_gain = max(0.0, min(1.0, level)) ** BD_LEVEL_POT_TAPER
+
+    # Schematic-derived LC anchor, with inferred pot-law mapping.
     lc_hz = 1.0 / (2.0 * math.pi * math.sqrt(BD_L1 * BD_C8))
-    f_base = lc_hz * (0.36 + 0.44 * tune)
-    f_sweep_ratio = 1.9 + 0.25 * (0.5 - tune)
+    f_base = lc_hz * BD_TUNE_MIN_SCALE * ((BD_TUNE_MAX_SCALE / BD_TUNE_MIN_SCALE) ** tune_pos)
 
-    tau_pitch  = BD_C5 * BD_R12
-    pitch_dec  = math.exp(-inv_fs / tau_pitch)
-    pitch_env  = 1.0
-
-    VR1 = BD_DECAY_POT_MIN + decay * BD_DECAY_POT_RANGE
+    VR1 = BD_DECAY_POT_MIN + decay_pos * BD_DECAY_POT_RANGE
     effective_r = (VR1 * BD_BODY_LOAD_OHMS) / (VR1 + BD_BODY_LOAD_OHMS)
-    tau_body = max(0.025, effective_r * BD_C8)
+    tau_body = min(BD_MAX_BODY_TAU, max(BD_MIN_BODY_TAU, effective_r * BD_C8))
     body_dec = math.exp(-inv_fs / tau_body)
 
-    tau_excite = BD_R17 * BD_C5 * (0.35 + 0.9 * attack)
+    tau_excite = BD_R17 * BD_C5 * (BD_EXCITE_TAU_SCALE + BD_EXCITE_TAU_RANGE * attack_pos)
     excite_dec = math.exp(-inv_fs / tau_excite)
-    excite_env = 0.18 + 0.82 * attack
+    excite_env = level_gain * (BD_EXCITE_AMOUNT_MIN + BD_EXCITE_AMOUNT_RANGE * attack_pos)
     excite_state = 0.0
 
-    tau_beater = BD_R17 * BD_C5 * (0.12 + 0.55 * attack)
-    beater_dec = math.exp(-inv_fs / tau_beater)
-    beater_env = 0.06 + 0.74 * attack
+    tau_transient = BD_R17 * BD_C5 * (BD_TRANSIENT_TAU_SCALE + BD_TRANSIENT_TAU_RANGE * attack_pos)
+    transient_dec = math.exp(-inv_fs / tau_transient)
+    transient_env = level_gain * (BD_TRANSIENT_AMOUNT_MIN + BD_TRANSIENT_AMOUNT_RANGE * attack_pos)
+    transient_state = 0.0
+    transient_tone_state = 0.0
+    transient_tone_coeff = 1.0 - math.exp(-2.0 * math.pi * (BD_TRANSIENT_TONE_MIN_HZ + BD_TRANSIENT_TONE_RANGE_HZ * attack_pos) / fs)
+
+    tau_pitch = BD_C5 * BD_R12
+    pitch_fast_dec = math.exp(-inv_fs / (tau_pitch * BD_PITCH_FAST_TAU_SCALE))
+    pitch_slow_dec = math.exp(-inv_fs / (tau_pitch * BD_PITCH_SLOW_TAU_SCALE))
+    pitch_fast_env = 1.0
+    pitch_slow_env = 1.0
+    pitch_fast_depth = BD_PITCH_FAST_DEPTH_MIN + BD_PITCH_FAST_DEPTH_RANGE * attack_pos
+    pitch_slow_depth = BD_PITCH_SLOW_DEPTH * (0.9 + 0.2 * attack_pos)
 
     body_z1 = body_z2 = 0.0
-    beater_state = 0.0
+    output_memory = 0.0
     for i in range(n):
-        f_now      = f_base * (1.0 + f_sweep_ratio * pitch_env)
-        pitch_env *= pitch_dec
+        f_now = f_base * (1.0 + pitch_fast_depth * pitch_fast_env + pitch_slow_depth * pitch_slow_env)
+        pitch_fast_env *= pitch_fast_dec
+        pitch_slow_env *= pitch_slow_dec
         omega = 2.0 * math.pi * min(f_now, fs * 0.45) * inv_fs
 
         excite = excite_env - excite_state
         excite_state = excite_env
         excite_env *= excite_dec
+
+        transient = transient_env - transient_state
+        transient_state = transient_env
+        transient_env *= transient_dec
+        transient_tone_state += transient_tone_coeff * (transient - transient_tone_state)
+        transient_click = transient - transient_tone_state
+
         a1 = 2.0 * body_dec * math.cos(omega)
         a2 = body_dec * body_dec
-        body = excite + a1 * body_z1 - a2 * body_z2
+        body = excite + transient_click * BD_TRANSIENT_TO_BODY + a1 * body_z1 - a2 * body_z2
         body_z2 = body_z1
         body_z1 = body
 
-        beater_delta = beater_env - beater_state
-        beater_state = beater_env
-        beater_env *= beater_dec
+        shaped_body = math.tanh(body * BD_BODY_DRIVE)
+        shaped_transient = math.tanh(transient_click * BD_TRANSIENT_DRIVE)
+        mixed = shaped_body + shaped_transient
 
-        shaped_body = math.tanh(body * 1.6)
-        shaped_beater = math.tanh(beater_delta * 6.0)
-        out[i] = math.tanh(shaped_body + shaped_beater) * 0.72
+        output_memory += (1.0 - math.exp(-2.0 * math.pi * BD_OUTPUT_MEMORY_HZ / fs)) * (mixed - output_memory)
+        stage_input = mixed + 0.35 * output_memory
+        pos_drive = BD_OUTPUT_DRIVE * (1.0 + BD_OUTPUT_ASYMMETRY)
+        neg_drive = BD_OUTPUT_DRIVE * (1.0 - 0.5 * BD_OUTPUT_ASYMMETRY)
+        shaped = 0.5 * (math.tanh((stage_input + BD_OUTPUT_BIAS) * pos_drive) +
+                        math.tanh((stage_input - BD_OUTPUT_BIAS) * neg_drive))
+        dc = 0.5 * (math.tanh(BD_OUTPUT_BIAS * pos_drive) +
+                    math.tanh(-BD_OUTPUT_BIAS * neg_drive))
+        out[i] = (shaped - dc) * BD_OUTPUT_GAIN
 
     return out
 
