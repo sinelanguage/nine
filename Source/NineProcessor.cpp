@@ -21,7 +21,7 @@ const FUID NineProcessor::uid = NineProcessorUID;
 static const float kDefaults[kNumParams] = {
     0.5f, // kBdTune
     0.5f, // kBdDecay
-    0.5f, // kBdTone
+    0.5f, // kBdAttack
     0.8f, // kBdLevel
     0.5f, // kSdTune
     0.5f, // kSdDecay
@@ -271,7 +271,7 @@ void NineProcessor::applyParam(ParamID pid) noexcept
     {
         case kBdTune:   bd_.tune    = v; break;
         case kBdDecay:  bd_.decay   = v; break;
-        case kBdTone:   bd_.tone    = v; break;
+        case kBdAttack: bd_.attack  = v; break;
         case kBdLevel:  bd_.level   = v; break;
         case kSdTune:   sd_.tune    = v; break;
         case kSdDecay:  sd_.decay   = v; break;

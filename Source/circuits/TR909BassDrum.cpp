@@ -1,63 +1,79 @@
 #include "TR909BassDrum.h"
 #include <cmath>
 
+namespace {
+constexpr double kDecayPotMinOhms = 1000.0;
+constexpr double kDecayPotRangeOhms = 499000.0; // 499 kΩ range (1 kΩ to 500 kΩ total)
+constexpr double kBodyLoadOhms = 18000.0;       // effective fixed load of the bridged network/output stage
+}
+
 void TR909BassDrum::prepare(double sampleRate) {
     fs_    = sampleRate;
     invFs_ = 1.0 / sampleRate;
-    phase_ = 0.0;
-    ampEnv_ = pitchEnv_ = clickLevel_ = 0.0;
+    bodyZ1_ = bodyZ2_ = 0.0;
+    exciteEnv_ = exciteState_ = pitchEnv_ = beaterEnv_ = beaterState_ = 0.0;
 }
 
 void TR909BassDrum::trigger(float velocity, bool accent) {
     accentGain_ = accent ? 1.4f : 1.0f;
-    const float v = velocity * accentGain_;
+    const double v = static_cast<double>(velocity * accentGain_) * static_cast<double>(level);
+    const double tuneNorm = static_cast<double>(tune);
+    const double decayNorm = static_cast<double>(decay);
+    const double attackNorm = static_cast<double>(attack);
 
-    // --- Derive parameters from component values ---
-    // TUNE maps to f_base: 40–100 Hz (ω₀/2π = 131 Hz is the reference)
-    fBase_  = 40.0 + static_cast<double>(tune) * 60.0;
+    // --- Derive parameters from component values and control laws ---
+    const double lcHz = 1.0 / (2.0 * M_PI * std::sqrt(L1 * C8));
+    fBase_ = lcHz * (0.36 + 0.44 * tuneNorm);
+    fSweepRatio_ = 1.9 + 0.25 * (0.5 - tuneNorm);
 
-    // Pitch sweep: starts at fBase * ratio, decays to fBase
-    // Ratio from transistor switching: ~5× at max tune
-    fDelta_ = fBase_ * (1.0 + static_cast<double>(tune) * 3.5) - fBase_;
-
-    // τ_pitch from C5 × R12 (fixed schematic values, TUNE shifts slightly)
-    const double tauPitch = C5 * R12 * (0.5 + static_cast<double>(tune) * 0.5);
+    // Pitch sweep from the trigger charge on C5 through R12.
+    const double tauPitch = C5 * R12;
     pitchDecay_ = std::exp(-invFs_ / tauPitch);
     pitchEnv_   = 1.0;
 
-    // τ_decay from VR1 × C8; VR1 ∈ [1kΩ, 500kΩ]
-    const double VR1 = 1000.0 + static_cast<double>(decay) * 499000.0;
-    const double tauAmp = std::min(VR1 * C8, 4.0);
-    ampDecay_ = std::exp(-invFs_ / tauAmp);
-    ampEnv_   = static_cast<double>(v * level);
+    // Loaded decay path for the resonant body.
+    const double VR1 = kDecayPotMinOhms + decayNorm * kDecayPotRangeOhms;
+    const double effectiveR = (VR1 * kBodyLoadOhms) / (VR1 + kBodyLoadOhms);
+    // Keep the loaded body envelope in a practical ringing range so minimum decay
+    // settings still excite a short but audible analog-style bass drum body.
+    const double tauBody = std::max(0.025, effectiveR * C8);
+    bodyDecay_ = std::exp(-invFs_ / tauBody);
 
-    // Click: RC differentiator from R17, C5 (τ = R17×C5 ≈ 2.2ms)
-    const double tauClick = R17 * C5 * (0.1 + static_cast<double>(tone) * 0.9);
-    clickDecay_ = std::exp(-invFs_ / tauClick);
-    clickLevel_ = static_cast<double>(v * tone * level) * 0.8;
+    // Short attack excitation into the resonant network.
+    const double tauExcite = R17 * C5 * (0.35 + 0.9 * attackNorm);
+    exciteDecay_ = std::exp(-invFs_ / tauExcite);
+    exciteEnv_ = v * (0.18 + 0.82 * attackNorm);
+    exciteState_ = 0.0;
 
-    // Reset oscillator phase to start of cycle
-    phase_ = 0.0;
+    // Differentiated beater transient for the ATTACK control.
+    const double tauBeater = R17 * C5 * (0.12 + 0.55 * attackNorm);
+    beaterDecay_ = std::exp(-invFs_ / tauBeater);
+    beaterEnv_ = v * (0.06 + 0.74 * attackNorm);
+    beaterState_ = 0.0;
+
+    bodyZ1_ = bodyZ2_ = 0.0;
 }
 
 float TR909BassDrum::process() {
-    // Instantaneous frequency with pitch envelope
-    const double fNow = fBase_ + fDelta_ * pitchEnv_;
+    const double fNow = fBase_ * (1.0 + fSweepRatio_ * pitchEnv_);
     pitchEnv_ *= pitchDecay_;
+    const double omega = 2.0 * M_PI * std::fmin(fNow, fs_ * 0.45) * invFs_;
 
-    // Phase accumulator (avoids IIR initialisation artifacts)
-    phase_ += 2.0 * M_PI * fNow * invFs_;
-    if (phase_ > M_PI) phase_ -= 2.0 * M_PI;
+    const double excite = exciteEnv_ - exciteState_;
+    exciteState_ = exciteEnv_;
+    exciteEnv_ *= exciteDecay_;
+    const double a1 = 2.0 * bodyDecay_ * std::cos(omega);
+    const double a2 = bodyDecay_ * bodyDecay_;
+    const double body = excite + a1 * bodyZ1_ - a2 * bodyZ2_;
+    bodyZ2_ = bodyZ1_;
+    bodyZ1_ = body;
 
-    // Oscillator amplitude × envelope
-    const double osc = std::sin(phase_) * ampEnv_;
-    ampEnv_ *= ampDecay_;
+    const double beaterDelta = beaterEnv_ - beaterState_;
+    beaterState_ = beaterEnv_;
+    beaterEnv_ *= beaterDecay_;
 
-    // Click transient
-    const double click = clickLevel_;
-    clickLevel_ *= clickDecay_;
-
-    // Mix and saturate (transistor output stage model)
-    const double out = softclip((osc + click * static_cast<double>(tone)) * 1.5) * 0.67;
+    const double shapedBody = softclip(body * 1.6);
+    const double shapedBeater = softclip(beaterDelta * 6.0);
+    const double out = softclip(shapedBody + shapedBeater) * 0.72;
     return static_cast<float>(out);
 }

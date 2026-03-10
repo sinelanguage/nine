@@ -21,7 +21,7 @@ static const ParamDef kParamDefs[kNumParams] = {
     // Bass Drum
     { STR16("BD Tune"),      0.5 },
     { STR16("BD Decay"),     0.5 },
-    { STR16("BD Tone"),      0.5 },
+    { STR16("BD Attack"),    0.5 },
     { STR16("BD Level"),     0.8 },
     // Snare
     { STR16("SD Tune"),      0.5 },

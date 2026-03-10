@@ -41,6 +41,9 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Bass Drum (TR909BassDrum.h)
 BD_L1  = 35e-3;  BD_C8  = 47e-6;  BD_R17 = 2200.0; BD_C5 = 1e-6; BD_R12 = 4700.0
+BD_DECAY_POT_MIN = 1000.0
+BD_DECAY_POT_RANGE = 499000.0
+BD_BODY_LOAD_OHMS = 18000.0
 # Snare Drum (TR909SnareDrum.h)
 SD_L3  = 35e-3;  SD_C14 = 10e-6;  SD_L4  = 35e-3;  SD_C16 = 4.7e-6
 # Toms (TR909Tom.h)
@@ -74,39 +77,58 @@ def bpf_coeff(fc: float, Q: float, fs: float):
 # Circuit model simulations (mirror C++ DSP exactly)
 # ---------------------------------------------------------------------------
 
-def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, tone=0.5):
-    """TR-909 Bass Drum: phase-accumulator oscillator with pitch envelope."""
+def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, attack=0.5):
+    """TR-909 Bass Drum: damped resonator with pitch sweep and beater transient."""
     inv_fs = 1.0 / fs
     n  = int(fs * duration)
     out = np.zeros(n)
 
     # Schematic-derived parameters
-    f_base  = 40.0 + tune * 60.0            # TUNE pot range
-    f_delta = f_base * (1.0 + tune * 3.5) - f_base  # pitch sweep
+    lc_hz = 1.0 / (2.0 * math.pi * math.sqrt(BD_L1 * BD_C8))
+    f_base = lc_hz * (0.36 + 0.44 * tune)
+    f_sweep_ratio = 1.9 + 0.25 * (0.5 - tune)
 
-    tau_pitch  = BD_C5 * BD_R12 * (0.5 + tune * 0.5)  # C5×R12
+    tau_pitch  = BD_C5 * BD_R12
     pitch_dec  = math.exp(-inv_fs / tau_pitch)
     pitch_env  = 1.0
 
-    VR1       = 1000.0 + decay * 499000.0   # DECAY pot
-    tau_amp   = min(VR1 * BD_C8, 4.0)       # VR1×C8
-    amp_dec   = math.exp(-inv_fs / tau_amp)
-    amp_env   = 1.0
+    VR1 = BD_DECAY_POT_MIN + decay * BD_DECAY_POT_RANGE
+    effective_r = (VR1 * BD_BODY_LOAD_OHMS) / (VR1 + BD_BODY_LOAD_OHMS)
+    tau_body = max(0.025, effective_r * BD_C8)
+    body_dec = math.exp(-inv_fs / tau_body)
 
-    tau_click  = BD_R17 * BD_C5 * (0.1 + tone * 0.9)  # R17×C5
-    click_dec  = math.exp(-inv_fs / tau_click)
-    click_lv   = tone * 0.8
+    tau_excite = BD_R17 * BD_C5 * (0.35 + 0.9 * attack)
+    excite_dec = math.exp(-inv_fs / tau_excite)
+    excite_env = 0.18 + 0.82 * attack
+    excite_state = 0.0
 
-    phase = 0.0
+    tau_beater = BD_R17 * BD_C5 * (0.12 + 0.55 * attack)
+    beater_dec = math.exp(-inv_fs / tau_beater)
+    beater_env = 0.06 + 0.74 * attack
+
+    body_z1 = body_z2 = 0.0
+    beater_state = 0.0
     for i in range(n):
-        f_now      = f_base + f_delta * pitch_env
+        f_now      = f_base * (1.0 + f_sweep_ratio * pitch_env)
         pitch_env *= pitch_dec
-        phase += 2.0 * math.pi * f_now * inv_fs
-        if phase > math.pi: phase -= 2.0 * math.pi
-        osc     = math.sin(phase) * amp_env
-        amp_env *= amp_dec
-        click   = click_lv; click_lv *= click_dec
-        out[i]  = math.tanh((osc + click * tone) * 1.5) / 1.5
+        omega = 2.0 * math.pi * min(f_now, fs * 0.45) * inv_fs
+
+        excite = excite_env - excite_state
+        excite_state = excite_env
+        excite_env *= excite_dec
+        a1 = 2.0 * body_dec * math.cos(omega)
+        a2 = body_dec * body_dec
+        body = excite + a1 * body_z1 - a2 * body_z2
+        body_z2 = body_z1
+        body_z1 = body
+
+        beater_delta = beater_env - beater_state
+        beater_state = beater_env
+        beater_env *= beater_dec
+
+        shaped_body = math.tanh(body * 1.6)
+        shaped_beater = math.tanh(beater_delta * 6.0)
+        out[i] = math.tanh(shaped_body + shaped_beater) * 0.72
 
     return out
 

@@ -29,7 +29,7 @@ enum NineParamID : Steinberg::Vst::ParamID
     // Bass Drum
     kBdTune   = 0,
     kBdDecay,
-    kBdTone,
+    kBdAttack,
     kBdLevel,
 
     // Snare Drum
