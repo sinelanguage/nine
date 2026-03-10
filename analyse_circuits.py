@@ -114,7 +114,7 @@ def bpf_coeff(fc: float, Q: float, fs: float):
 # Circuit model simulations (mirror C++ DSP exactly)
 # ---------------------------------------------------------------------------
 
-def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, attack=0.5):
+def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, attack=0.5, level=0.8):
     """TR-909 Bass Drum: resonant body + dual-rate pitch sweep + shaped transient."""
     inv_fs = 1.0 / fs
     n  = int(fs * duration)
@@ -123,7 +123,7 @@ def simulate_bass_drum(fs=44100, duration=0.5, tune=0.5, decay=0.5, attack=0.5):
     tune_pos = max(0.0, min(1.0, tune)) ** BD_TUNE_POT_TAPER
     decay_pos = max(0.0, min(1.0, decay)) ** BD_DECAY_POT_TAPER
     attack_pos = max(0.0, min(1.0, attack)) ** BD_ATTACK_POT_TAPER
-    level_gain = max(0.0, min(1.0, 0.8)) ** BD_LEVEL_POT_TAPER
+    level_gain = max(0.0, min(1.0, level)) ** BD_LEVEL_POT_TAPER
 
     # Schematic-derived LC anchor, with inferred pot-law mapping.
     lc_hz = 1.0 / (2.0 * math.pi * math.sqrt(BD_L1 * BD_C8))

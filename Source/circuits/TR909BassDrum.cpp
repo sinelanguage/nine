@@ -1,13 +1,12 @@
 #include "TR909BassDrum.h"
-#include <algorithm>
 #include <cmath>
 
 namespace {
 constexpr double kTwoPi = 6.28318530717958647692;
 
-double expDecay(double tauSeconds, double invFs) noexcept
+double expDecay(double tauSeconds, double samplePeriod) noexcept
 {
-    return std::exp(-invFs / std::max(tauSeconds, 1.0e-6));
+    return std::exp(-samplePeriod / std::max(tauSeconds, 1.0e-6));
 }
 
 double onePoleCoeff(double cutoffHz, double sampleRate) noexcept
@@ -17,7 +16,8 @@ double onePoleCoeff(double cutoffHz, double sampleRate) noexcept
 
 double parallelResistance(double a, double b) noexcept
 {
-    return (a * b) / std::max(a + b, 1.0);
+    const double sum = a + b;
+    return (sum <= 1.0e-12) ? 0.0 : ((a * b) / sum);
 }
 } // namespace
 

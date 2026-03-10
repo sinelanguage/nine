@@ -135,5 +135,5 @@ private:
 
     static double clamp01(double x) noexcept { return std::clamp(x, 0.0, 1.0); }
     static double softclip(double x) noexcept { return std::tanh(x); }
-    static double snapToZero(double x) noexcept { return (std::abs(x) < 1.0e-18) ? 0.0 : x; }
+    static double snapToZero(double x) noexcept { return (std::abs(x) < 1.0e-15) ? 0.0 : x; }
 };
